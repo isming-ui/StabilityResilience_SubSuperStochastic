@@ -96,6 +96,9 @@ def per_plot_metrics(plot_year: pd.DataFrame):
     """Extract observed (Omega_2, Delta_2, I_2, Phi_{2,2}) and the CDSM envelope
     for every plot in plot_year."""
     rows = []
+    numsp_map = plot_year.attrs.get("NumSp", {})
+    if not isinstance(numsp_map, pd.Series):
+        numsp_map = pd.Series(numsp_map)
     for plot, ts in plot_year.iterrows():
         ts = ts.dropna()
         # Y_n: mean over non-perturbation years (exclude 2002 +/- 1 and 2021 +/- 1)
@@ -127,7 +130,8 @@ def per_plot_metrics(plot_year: pd.DataFrame):
                 eta = np.concatenate([eta, np.full(P_INTERVAL - len(eta), eta[-1])])
             else:
                 eta = eta[:P_INTERVAL]
-        rows.append(dict(plot=plot, Yn=Yn, Omega2=Omega2, Delta2=Delta2,
+        rows.append(dict(plot=plot, NumSp=numsp_map.get(plot, np.nan),
+                         Yn=Yn, Omega2=Omega2, Delta2=Delta2,
                          I2_obs=I2_obs, Phi2_obs=Phi2_obs, eta=eta))
     return pd.DataFrame(rows)
 
@@ -158,34 +162,100 @@ def mape(o, h):
     return float(np.mean(np.abs((h[ok] - o[ok]) / o[ok])) * 100) if ok.any() else float("nan")
 
 
-def scatter_with_diag(o, h, xlabel, ylabel, fname, color):
-    ok = np.isfinite(o) & np.isfinite(h)
-    o, h = o[ok], h[ok]
-    if o.size == 0:
-        return
-    m = mape(o, h)
-    r2 = float(np.corrcoef(o, h)[0, 1] ** 2)
-    fig, ax = plt.subplots(figsize=(3.4, 2.6))
-    ax.scatter(o, h, s=14, alpha=0.55, color=color, linewidth=0,
-               rasterized=True)
-    lo, hi = float(min(o.min(), h.min())), float(max(o.max(), h.max()))
-    pad = (hi - lo) * 0.05
+def _panel(ax, obs, h_scalar, h_cdsm, numsp, ylabel, show_legend=False):
+    """Draw a single observed-vs-predicted panel with scalar + CDSM overlay,
+    colour-coded by NumSp."""
+    import matplotlib.cm as cm
+    levels = sorted(set(int(x) for x in numsp if np.isfinite(x)))
+    cmap = cm.get_cmap("viridis", len(levels))
+    level_color = {lv: cmap(i) for i, lv in enumerate(levels)}
+
+    pooled_obs = obs[np.isfinite(obs)]
+    pooled_pred = np.concatenate([h_scalar[np.isfinite(h_scalar)],
+                                   h_cdsm[np.isfinite(h_cdsm)]])
+    lo = float(min(pooled_obs.min(), pooled_pred.min()))
+    hi = float(max(pooled_obs.max(), pooled_pred.max()))
+    pad = (hi - lo) * 0.07
     ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], "--",
-            lw=0.9, color=sim.PALETTE["gray"], label="$y=x$")
-    # regression line + 95% band
-    sim._regression_band(ax, o, h, color=color)
+            lw=0.8, color=sim.PALETTE["gray"], zorder=1)
+
+    for ns in levels:
+        sel = (numsp == ns)
+        col = level_color[ns]
+        ok_s = sel & np.isfinite(h_scalar) & np.isfinite(obs)
+        ok_c = sel & np.isfinite(h_cdsm) & np.isfinite(obs)
+        if ok_s.any():
+            ax.scatter(obs[ok_s], h_scalar[ok_s], s=24, facecolors="none",
+                       edgecolors=col, linewidths=0.9, zorder=2)
+        if ok_c.any():
+            ax.scatter(obs[ok_c], h_cdsm[ok_c], s=22, c=[col], linewidth=0,
+                       alpha=0.85, zorder=3)
+
+    m_s = mape(obs, h_scalar)
+    m_c = mape(obs, h_cdsm)
+    txt = (r"\textsf{scalar: " + f"{m_s:.0f}" + r"\%}"
+           + "\n" + r"\textsf{CDSM: " + f"{m_c:.0f}" + r"\%}")
+    sim._inset_metric_box(ax, txt, loc="upper left")
+
     ax.set_xlim(lo - pad, hi + pad)
     ax.set_ylim(lo - pad, hi + pad)
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
+    ax.set_xlabel(r"observed " + ylabel)
+    ax.set_ylabel(r"predicted " + ylabel)
     ax.grid(True)
-    sim._inset_metric_box(
-        ax,
-        f"MAPE = {m:.2f}" + r"\%" + f",  $R^2$ = {r2:.2f}\nn = {o.size} plots",
-        loc="lower right",
-    )
-    fig.tight_layout()
+
+    if show_legend:
+        from matplotlib.lines import Line2D
+        handles = [
+            Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
+                   markeredgecolor=sim.PALETTE["edge"], markeredgewidth=0.9,
+                   markersize=5, label="scalar"),
+            Line2D([0], [0], marker="o", color="w",
+                   markerfacecolor=sim.PALETTE["edge"], markersize=5,
+                   label="CDSM"),
+        ]
+        ax.legend(handles=handles, loc="lower right", fontsize=7,
+                  handletextpad=0.3, borderaxespad=0.4)
+    return levels, level_color
+
+
+def make_combined_figure(metrics: pd.DataFrame, fname: str) -> None:
+    """Single figure with two panels (I_2, Phi_{2,2}) sharing a colour
+    encoding of plant richness NumSp and overlaying scalar + CDSM predictors."""
+    import matplotlib.cm as cm
+    import matplotlib.colors as mcolors
+
+    obs_I = metrics["I2_obs"].to_numpy(dtype=float)
+    sc_I = metrics["I2_scalar"].to_numpy(dtype=float)
+    cd_I = metrics["I2_cdsm"].to_numpy(dtype=float)
+    obs_P = metrics["Phi2_obs"].to_numpy(dtype=float)
+    sc_P = metrics["Phi2_scalar"].to_numpy(dtype=float)
+    cd_P = metrics["Phi2_cdsm"].to_numpy(dtype=float)
+    numsp = metrics["NumSp"].to_numpy(dtype=float)
+
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(7.0, 2.9),
+                                    gridspec_kw=dict(wspace=0.32))
+    levels, level_color = _panel(axL, obs_I, sc_I, cd_I, numsp, r"$I_2$",
+                                  show_legend=True)
+    _panel(axR, obs_P, sc_P, cd_P, numsp, r"$\Phi_{2,2}$", show_legend=False)
+
+    # subplot tags
+    for ax, tag in zip((axL, axR), ("(a)", "(b)")):
+        ax.text(-0.18, 1.02, tag, transform=ax.transAxes, fontsize=9,
+                fontweight="bold", va="bottom", ha="left")
+
+    # shared discrete colourbar for NumSp
+    cmap = cm.get_cmap("viridis", len(levels))
+    norm = mcolors.BoundaryNorm(
+        boundaries=[i - 0.5 for i in range(len(levels) + 1)],
+        ncolors=len(levels))
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    cbar = fig.colorbar(sm, ax=(axL, axR), orientation="vertical",
+                        fraction=0.025, pad=0.02, ticks=range(len(levels)))
+    cbar.ax.set_yticklabels([str(int(lv)) for lv in levels])
+    cbar.set_label(r"NumSp", rotation=90, labelpad=4)
+    cbar.outline.set_linewidth(0.6)
+
     fig.savefig(fname)
     plt.close(fig)
 
@@ -207,19 +277,8 @@ def main():
     metrics = per_plot_metrics(blocks)
     metrics = apply_predictors(metrics)
     print(f"  {len(metrics)} blocks usable for prediction")
-    print("[4/4] generating figures ...")
-    scatter_with_diag(metrics["I2_obs"].values, metrics["I2_scalar"].values,
-                      r"observed $I_2$", r"scalar $\hat I_2$",
-                      "fig_biodiv_I2_scalar.png", sim.PALETTE["red"])
-    scatter_with_diag(metrics["I2_obs"].values, metrics["I2_cdsm"].values,
-                      r"observed $I_2$", r"CDSM $\hat I_2$",
-                      "fig_biodiv_I2_cdsm.png", sim.PALETTE["blue"])
-    scatter_with_diag(metrics["Phi2_obs"].values, metrics["Phi2_scalar"].values,
-                      r"observed $\Phi_{2,2}$", r"scalar $\hat\Phi_{2,2}$",
-                      "fig_biodiv_Phi_scalar.png", sim.PALETTE["red"])
-    scatter_with_diag(metrics["Phi2_obs"].values, metrics["Phi2_cdsm"].values,
-                      r"observed $\Phi_{2,2}$", r"CDSM $\hat\Phi_{2,2}$",
-                      "fig_biodiv_Phi_cdsm.png", sim.PALETTE["blue"])
+    print("[4/4] generating combined figure ...")
+    make_combined_figure(metrics, "fig_biodiv.png")
 
     print("\nSUMMARY (BioDIV real-data validation):")
     print(f"  plots: {len(metrics)}")
