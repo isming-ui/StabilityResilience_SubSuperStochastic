@@ -269,8 +269,8 @@ def main():
     print(f"  retained {py.shape[0]} plots x {py.shape[1]} years "
           f"({py.columns.min()}-{py.columns.max()})")
     print("[2/4] aggregating into subtreatment-block trajectories ...")
-    blocks = bootstrap_aggregated_timeseries(py, block_size=5,
-                                             n_per_richness=6, seed=0)
+    blocks = bootstrap_aggregated_timeseries(py, block_size=10,
+                                             n_per_richness=20, seed=0)
     blocks.attrs["NumSp"] = pd.Series(blocks.attrs["NumSp_block"])
     print(f"  {blocks.shape[0]} aggregated trajectories x {blocks.shape[1]} years")
     print("[3/4] extracting per-block metrics + applying predictors ...")
