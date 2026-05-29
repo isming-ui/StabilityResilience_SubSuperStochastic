@@ -16,6 +16,7 @@ used by Isbell et al. (Nature, 2026).
 | `biodiv_validation.py` | Field-data cross-check on the BioDIV (e120) dataset: per-block extraction of `(Ω_2, Δ_2)`, empirical CDSM envelope, scatter plots of observed vs. predicted `I_2` and `Φ_{2,2}` |
 | `download_data.py` | One-shot fetch of the BioDIV CSV from the Environmental Data Initiative |
 | `requirements.txt` | Python dependencies |
+| `reference.bib` | BibTeX file with all 36 paper references; every entry carries a Crossref-verified DOI |
 
 ## Quick start
 

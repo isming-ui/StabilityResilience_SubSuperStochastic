@@ -1,10 +1,10 @@
 __pycache__/
 *.pyc
 
-# LaTeX (paper source + intermediates kept out of the public code repo)
+# LaTeX (paper source + intermediates kept out of the public code repo;
+# reference.bib is tracked because it doubles as a verified citation list)
 *.tex
 *.cls
-*.bib
 *.aux
 *.bbl
 *.blg
