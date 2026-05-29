@@ -219,24 +219,13 @@ def _panel(ax, obs, h_scalar, h_cdsm, numsp, ylabel, show_legend=False):
     return levels, level_color
 
 
-def _numsp_legend(ax, levels):
-    """Compact inline legend showing the NumSp viridis colour scale."""
-    import matplotlib.cm as cm
-    from matplotlib.lines import Line2D
-    cmap = cm.get_cmap("viridis", len(levels))
-    handles = [Line2D([0], [0], marker="o", color="w",
-                       markerfacecolor=cmap(i), markersize=4,
-                       label=str(int(lv)))
-               for i, lv in enumerate(levels)]
-    leg = ax.legend(handles=handles, loc="lower right",
-                    title=r"NumSp", fontsize=6, title_fontsize=6,
-                    handletextpad=0.2, columnspacing=0.5,
-                    borderaxespad=0.4, ncol=5)
-    leg.get_title().set_fontsize(6)
-
-
 def make_panel_figure(metrics: pd.DataFrame, which: str, fname: str) -> None:
-    """Generate one self-contained subfigure (I_2 or Phi_{2,2})."""
+    """Generate one self-contained subfigure (I_2 or Phi_{2,2}) with an attached
+    discrete NumSp colour bar on the right edge."""
+    import matplotlib.cm as cm
+    import matplotlib.colors as mcolors
+    from matplotlib.lines import Line2D
+
     obs_col = "I2_obs"   if which == "I2" else "Phi2_obs"
     sc_col  = "I2_scalar" if which == "I2" else "Phi2_scalar"
     cd_col  = "I2_cdsm"   if which == "I2" else "Phi2_cdsm"
@@ -247,26 +236,33 @@ def make_panel_figure(metrics: pd.DataFrame, which: str, fname: str) -> None:
     cd  = metrics[cd_col].to_numpy(dtype=float)
     numsp = metrics["NumSp"].to_numpy(dtype=float)
 
-    fig, ax = plt.subplots(figsize=(2.4, 2.4))
+    fig, ax = plt.subplots(figsize=(2.7, 2.4))
     levels, _ = _panel(ax, obs, sc, cd, numsp, ylab, show_legend=False)
 
-    # combined inline legend: method markers + NumSp colour bar
-    from matplotlib.lines import Line2D
-    import matplotlib.cm as cm
+    # marker convention (scalar vs CDSM) inside the plot
+    handles = [
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
+               markeredgecolor=sim.PALETTE["edge"], markeredgewidth=0.9,
+               markersize=4, label="scalar"),
+        Line2D([0], [0], marker="o", color="w",
+               markerfacecolor=sim.PALETTE["edge"], markersize=4,
+               label="CDSM"),
+    ]
+    ax.legend(handles=handles, loc="lower right", fontsize=6,
+              handletextpad=0.2, borderaxespad=0.4)
+
+    # discrete NumSp colour bar attached to the right edge
     cmap = cm.get_cmap("viridis", len(levels))
-    if which == "I2":
-        handles = [
-            Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
-                   markeredgecolor=sim.PALETTE["edge"], markeredgewidth=0.9,
-                   markersize=4, label="scalar"),
-            Line2D([0], [0], marker="o", color="w",
-                   markerfacecolor=sim.PALETTE["edge"], markersize=4,
-                   label="CDSM"),
-        ]
-        ax.legend(handles=handles, loc="lower right", fontsize=6,
-                  handletextpad=0.2, borderaxespad=0.4)
-    else:
-        _numsp_legend(ax, levels)
+    norm = mcolors.BoundaryNorm(
+        boundaries=[i - 0.5 for i in range(len(levels) + 1)],
+        ncolors=len(levels))
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    cbar = fig.colorbar(sm, ax=ax, orientation="vertical",
+                        fraction=0.055, pad=0.04, ticks=range(len(levels)))
+    cbar.ax.set_yticklabels([str(int(lv)) for lv in levels])
+    cbar.set_label(r"NumSp", rotation=90, labelpad=4)
+    cbar.outline.set_linewidth(0.6)
+    cbar.ax.tick_params(labelsize=7, width=0.6, length=2)
 
     fig.savefig(fname)
     plt.close(fig)
