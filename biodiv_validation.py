@@ -280,12 +280,31 @@ def main():
     print("[4/4] generating combined figure ...")
     make_combined_figure(metrics, "fig_biodiv.png")
 
-    print("\nSUMMARY (BioDIV real-data validation):")
-    print(f"  plots: {len(metrics)}")
+    print("\nSUMMARY (BioDIV real-data validation, seed=0 displayed):")
+    print(f"  blocks: {len(metrics)} (bootstrap resamples; each plot reused ~6x)")
     print(f"  I2  scalar MAPE = {mape(metrics['I2_obs'], metrics['I2_scalar']):.2f}%")
     print(f"  I2  CDSM   MAPE = {mape(metrics['I2_obs'], metrics['I2_cdsm']):.2f}%")
     print(f"  Phi scalar MAPE = {mape(metrics['Phi2_obs'], metrics['Phi2_scalar']):.2f}%")
     print(f"  Phi CDSM   MAPE = {mape(metrics['Phi2_obs'], metrics['Phi2_cdsm']):.2f}%")
+
+    # multi-seed robustness check (10 seeds)
+    print("\nROBUSTNESS (10 random seeds, mean +/- std):")
+    rows = []
+    for seed in range(10):
+        bk = bootstrap_aggregated_timeseries(py, block_size=10,
+                                             n_per_richness=20, seed=seed)
+        bk.attrs["NumSp"] = pd.Series(bk.attrs["NumSp_block"])
+        mm = apply_predictors(per_plot_metrics(bk))
+        rows.append((
+            mape(mm["I2_obs"], mm["I2_scalar"]),
+            mape(mm["I2_obs"], mm["I2_cdsm"]),
+            mape(mm["Phi2_obs"], mm["Phi2_scalar"]),
+            mape(mm["Phi2_obs"], mm["Phi2_cdsm"]),
+        ))
+    arr = np.array(rows)
+    for i, lbl in enumerate(["I2  scalar", "I2  CDSM  ", "Phi scalar", "Phi CDSM  "]):
+        print(f"  {lbl} MAPE = {arr[:, i].mean():.1f}% +/- {arr[:, i].std():.1f}%"
+              f"  (range {arr[:, i].min():.1f}-{arr[:, i].max():.1f})")
     print(f"  Isbell 2026 baseline (ecosystem-level): I2 = 1.1%, Phi = 3.0%")
 
 
