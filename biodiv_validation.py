@@ -285,7 +285,20 @@ def main():
     metrics = per_plot_metrics(blocks)
     metrics = apply_predictors(metrics)
     print(f"  {len(metrics)} blocks usable for prediction")
-    print("[4/4] generating subfigures ...")
+    print("[4/4] saving derived dataset + generating subfigures ...")
+    out_dir = os.path.join(here, "data")
+    os.makedirs(out_dir, exist_ok=True)
+    # (i) the 100 aggregated trajectories (block x year biomass matrix)
+    blocks_to_save = blocks.copy()
+    blocks_to_save.insert(0, "NumSp",
+                          blocks_to_save.index.map(blocks.attrs["NumSp_block"]))
+    blocks_to_save.to_csv(os.path.join(out_dir, "biodiv_blocks_seed0.csv"))
+    # (ii) per-block extracted metrics + observed/predicted I_2 and Phi_{2,2}
+    metrics_to_save = metrics.drop(columns=["eta"]).copy()
+    metrics_to_save.to_csv(os.path.join(out_dir, "biodiv_metrics_seed0.csv"),
+                           index=False)
+    print(f"  wrote data/biodiv_blocks_seed0.csv  ({blocks_to_save.shape})")
+    print(f"  wrote data/biodiv_metrics_seed0.csv ({metrics_to_save.shape})")
     make_panel_figure(metrics, "I2",  "fig_biodiv_a.png")
     make_panel_figure(metrics, "Phi", "fig_biodiv_b.png")
 

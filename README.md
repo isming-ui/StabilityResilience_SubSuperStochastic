@@ -17,6 +17,8 @@ used by Isbell et al. (Nature, 2026).
 | `download_data.py` | One-shot fetch of the BioDIV CSV from the Environmental Data Initiative |
 | `requirements.txt` | Python dependencies |
 | `reference.bib` | BibTeX file with all 36 paper references; every entry carries a Crossref-verified DOI |
+| `data/biodiv_blocks_seed0.csv` | The $100$ bootstrap-aggregated trajectories (block $\times$ year biomass matrix) used as the input to `biodiv_validation.py`, with `NumSp` column attached |
+| `data/biodiv_metrics_seed0.csv` | Per-block extracted descriptors and predictions: `NumSp`, $Y_n$, $\Omega_2$, $\Delta_2$, observed and predicted $I_2$ and $\Phi_{2,2}$ (both scalar and CDSM) for each of the $100$ blocks |
 
 ## Quick start
 
