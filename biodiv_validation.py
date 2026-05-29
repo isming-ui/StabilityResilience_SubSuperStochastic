@@ -219,42 +219,54 @@ def _panel(ax, obs, h_scalar, h_cdsm, numsp, ylabel, show_legend=False):
     return levels, level_color
 
 
-def make_combined_figure(metrics: pd.DataFrame, fname: str) -> None:
-    """Single figure with two panels (I_2, Phi_{2,2}) sharing a colour
-    encoding of plant richness NumSp and overlaying scalar + CDSM predictors."""
+def _numsp_legend(ax, levels):
+    """Compact inline legend showing the NumSp viridis colour scale."""
     import matplotlib.cm as cm
-    import matplotlib.colors as mcolors
+    from matplotlib.lines import Line2D
+    cmap = cm.get_cmap("viridis", len(levels))
+    handles = [Line2D([0], [0], marker="o", color="w",
+                       markerfacecolor=cmap(i), markersize=4,
+                       label=str(int(lv)))
+               for i, lv in enumerate(levels)]
+    leg = ax.legend(handles=handles, loc="lower right",
+                    title=r"NumSp", fontsize=6, title_fontsize=6,
+                    handletextpad=0.2, columnspacing=0.5,
+                    borderaxespad=0.4, ncol=5)
+    leg.get_title().set_fontsize(6)
 
-    obs_I = metrics["I2_obs"].to_numpy(dtype=float)
-    sc_I = metrics["I2_scalar"].to_numpy(dtype=float)
-    cd_I = metrics["I2_cdsm"].to_numpy(dtype=float)
-    obs_P = metrics["Phi2_obs"].to_numpy(dtype=float)
-    sc_P = metrics["Phi2_scalar"].to_numpy(dtype=float)
-    cd_P = metrics["Phi2_cdsm"].to_numpy(dtype=float)
+
+def make_panel_figure(metrics: pd.DataFrame, which: str, fname: str) -> None:
+    """Generate one self-contained subfigure (I_2 or Phi_{2,2})."""
+    obs_col = "I2_obs"   if which == "I2" else "Phi2_obs"
+    sc_col  = "I2_scalar" if which == "I2" else "Phi2_scalar"
+    cd_col  = "I2_cdsm"   if which == "I2" else "Phi2_cdsm"
+    ylab    = r"$I_2$"    if which == "I2" else r"$\Phi_{2,2}$"
+
+    obs = metrics[obs_col].to_numpy(dtype=float)
+    sc  = metrics[sc_col].to_numpy(dtype=float)
+    cd  = metrics[cd_col].to_numpy(dtype=float)
     numsp = metrics["NumSp"].to_numpy(dtype=float)
 
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(7.0, 2.9),
-                                    gridspec_kw=dict(wspace=0.32))
-    levels, level_color = _panel(axL, obs_I, sc_I, cd_I, numsp, r"$I_2$",
-                                  show_legend=True)
-    _panel(axR, obs_P, sc_P, cd_P, numsp, r"$\Phi_{2,2}$", show_legend=False)
+    fig, ax = plt.subplots(figsize=(2.4, 2.4))
+    levels, _ = _panel(ax, obs, sc, cd, numsp, ylab, show_legend=False)
 
-    # subplot tags
-    for ax, tag in zip((axL, axR), ("(a)", "(b)")):
-        ax.text(-0.18, 1.02, tag, transform=ax.transAxes, fontsize=9,
-                fontweight="bold", va="bottom", ha="left")
-
-    # shared discrete colourbar for NumSp
+    # combined inline legend: method markers + NumSp colour bar
+    from matplotlib.lines import Line2D
+    import matplotlib.cm as cm
     cmap = cm.get_cmap("viridis", len(levels))
-    norm = mcolors.BoundaryNorm(
-        boundaries=[i - 0.5 for i in range(len(levels) + 1)],
-        ncolors=len(levels))
-    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-    cbar = fig.colorbar(sm, ax=(axL, axR), orientation="vertical",
-                        fraction=0.025, pad=0.02, ticks=range(len(levels)))
-    cbar.ax.set_yticklabels([str(int(lv)) for lv in levels])
-    cbar.set_label(r"NumSp", rotation=90, labelpad=4)
-    cbar.outline.set_linewidth(0.6)
+    if which == "I2":
+        handles = [
+            Line2D([0], [0], marker="o", color="w", markerfacecolor="none",
+                   markeredgecolor=sim.PALETTE["edge"], markeredgewidth=0.9,
+                   markersize=4, label="scalar"),
+            Line2D([0], [0], marker="o", color="w",
+                   markerfacecolor=sim.PALETTE["edge"], markersize=4,
+                   label="CDSM"),
+        ]
+        ax.legend(handles=handles, loc="lower right", fontsize=6,
+                  handletextpad=0.2, borderaxespad=0.4)
+    else:
+        _numsp_legend(ax, levels)
 
     fig.savefig(fname)
     plt.close(fig)
@@ -277,8 +289,9 @@ def main():
     metrics = per_plot_metrics(blocks)
     metrics = apply_predictors(metrics)
     print(f"  {len(metrics)} blocks usable for prediction")
-    print("[4/4] generating combined figure ...")
-    make_combined_figure(metrics, "fig_biodiv.png")
+    print("[4/4] generating subfigures ...")
+    make_panel_figure(metrics, "I2",  "fig_biodiv_a.png")
+    make_panel_figure(metrics, "Phi", "fig_biodiv_b.png")
 
     print("\nSUMMARY (BioDIV real-data validation, seed=0 displayed):")
     print(f"  blocks: {len(metrics)} (bootstrap resamples; each plot reused ~6x)")
