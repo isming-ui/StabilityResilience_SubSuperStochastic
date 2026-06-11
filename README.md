@@ -2,7 +2,7 @@
 
 Reference Python implementation accompanying:
 
-> **Predicting Temporal Stability and Resilience of Competitive Networked Systems via Sub/Super-Stochastic Matrices.** S. Yan. Submitted to *IEEE Transactions on Cybernetics*, 2026.
+> **Predicting Temporal Stability and Resilience of Competitive Networked Systems via Sub/Super-Stochastic Matrices.** S. Yan. Submitted to *IEEE Transactions on Network Science and Engineering*, 2026.
 
 The code reproduces every figure of Section VI of the paper, including the
 real-data cross-check on the Cedar Creek BioDIV (e120) grassland experiment
